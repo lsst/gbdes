@@ -107,7 +107,7 @@ PYBIND11_MODULE(wcsfit, m) {
             .def(py::init<ast::Mapping const &, std::string>(),
                  py::arg("mapping_"), py::arg("name_") = "");
 
-    py::class_<astrometry::Wcs, std::shared_ptr<astrometry::Wcs>>(m, "Wcs")
+    py::class_<astrometry::Wcs>(m, "Wcs")
             .def(py::init<astrometry::PixelMap *, astrometry::SphericalCoords const &, std::string, double,
                           bool>(),
                  py::arg("pm_"), py::arg("nativeCoords_"), py::arg("name") = "", py::arg("wScale_") = DEGREE,
@@ -131,7 +131,7 @@ PYBIND11_MODULE(wcsfit, m) {
             .def(py::init<std::vector<std::string>, std::vector<double>, std::vector<double>,
                           std::vector<double>>());
 
-    py::class_<Instrument, std::shared_ptr<Instrument>>(m, "Instrument")
+    py::class_<Instrument>(m, "Instrument")
             .def(py::init<std::string>(), py::arg("name_") = "")
             .def_readwrite("name", &Instrument::name)
             .def_readwrite("band", &Instrument::band)
