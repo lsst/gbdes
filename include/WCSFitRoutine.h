@@ -83,7 +83,8 @@ public:
     void fit(double maxError = 100., int minFitExposures = 200, double reserveFraction = 0.2,
              int randomNumberSeed = 1234, double minimumImprovement = 0.02, double clipThresh = 5.0,
              double chisqTolerance = 0.001, bool clipEntireMatch = false, bool divideInPlace = false,
-             bool purgeOutput = false, double minColor = -10.0, double maxColor = 10.0, bool calcSVD = false);
+             bool purgeOutput = false, double minColor = -10.0, double maxColor = 10.0, bool calcSVD = false,
+             double clipFraction = 0.0);
 
     Astro::outputCatalog getOutputCatalog();
 

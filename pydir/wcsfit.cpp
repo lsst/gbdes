@@ -199,7 +199,8 @@ PYBIND11_MODULE(wcsfit, m) {
                  py::arg("minimumImprovement") = 0.02, py::arg("clipThresh") = 5.0,
                  py::arg("chisqTolerance") = 0.001, py::arg("clipEntireMatch") = false,
                  py::arg("divideInPlace") = false, py::arg("purgeOutput") = false,
-                 py::arg("minColor") = -10.0, py::arg("maxColor") = 10.0, py::arg("calcSVD") = false)
+                 py::arg("minColor") = -10.0, py::arg("maxColor") = 10.0, py::arg("calcSVD") = false,
+                 py::arg("clipFraction") = 0.0)
             .def("saveResults", &WCSFit::saveResults)
             .def("getOutputCatalog", [](WCSFit &self) {
                     Astro::outputCatalog outCat = self.getOutputCatalog();

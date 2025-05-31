@@ -385,7 +385,8 @@ void WCSFit::setColors(const std::vector<int> &matchIDs, const std::vector<doubl
 
 void WCSFit::fit(double maxError, int minFitExposures, double reserveFraction, int randomNumberSeed,
                  double minimumImprovement, double clipThresh, double chisqTolerance, bool clipEntireMatch,
-                 bool divideInPlace, bool purgeOutput, double minColor, double maxColor, bool calcSVD) {
+                 bool divideInPlace, bool purgeOutput, double minColor, double maxColor, bool calcSVD,
+                 double clipFraction) {
     
     PROGRESS(2, Purging defective detections and matches);
 
@@ -501,7 +502,7 @@ void WCSFit::fit(double maxError, int minFitExposures, double reserveFraction, i
         oldthresh = thresh;
         // Clip entire matches on final passes if clipEntireMatch=true
         nclip = ca.sigmaClip(thresh, false, clipEntireMatch && !coarsePasses, verbose >= 1);
-        if (nclip == 0 && coarsePasses) {
+        if (nclip/double(matches.size()) > clipFraction && coarsePasses) {
             // Nothing being clipped; tighten tolerances and re-fit
             coarsePasses = false;
             ca.setRelTolerance(chisqTolerance);
@@ -526,7 +527,7 @@ void WCSFit::fit(double maxError, int minFitExposures, double reserveFraction, i
             PROGRESS(2, Purging unfittable maps);
             mapCollection.purgeInvalid();
         }
-    } while (coarsePasses || nclip > 0);
+    } while (coarsePasses || nclip/double(matches.size()) > clipFraction);
 
     // If there are reserved Matches, run sigma-clipping on them now.
     if (reserveFraction > 0.) {
