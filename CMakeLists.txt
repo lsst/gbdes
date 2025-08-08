@@ -9,6 +9,8 @@ include(CheckLibraryExists)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+find_package(OpenMP)
+
 find_library(CFITSIO cfitsio REQUIRED)
 
 find_package(YAML-CPP REQUIRED)
@@ -66,7 +68,7 @@ target_include_directories(gbdes PUBLIC
         ${PROJECT_SOURCE_DIR}/include
 )
 
-target_link_libraries(gbdes PUBLIC Eigen3::Eigen ${ASTSHIM_LIBRARIES} ${FFTW3} yaml-cpp cfitsio)
+target_link_libraries(gbdes PUBLIC Eigen3::Eigen ${ASTSHIM_LIBRARIES} ${FFTW3} yaml-cpp cfitsio OpenMP::OpenMP_CXX)
 
 add_executable(WCSFit src/WCSFit.cpp)
 target_link_libraries(WCSFit PUBLIC gbdes)

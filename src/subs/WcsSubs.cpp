@@ -67,13 +67,7 @@ void fitDefaulted(PixelMapCollection &pmc, vector<Extension *> extensions,
 
         // Get the boundaries of the device it uses
         Bounds<double> b = instruments[expo.instrument]->domains[extnptr->device];
-        if (logging) {
-            cerr << "instrument, device: " << expo.instrument << " " << extnptr->device
-                 << endl;
-            double txw, tyw;
-            extnptr->startWcs->toWorld(b.getXMin(), b.getYMin(), txw, tyw);
-            cerr << "check p1 " << txw << " " << tyw << endl;
-        }
+
         // Generate a grid of matched Detections
         const int nGridPoints = 512;  // Number of test points for map initialization
 
@@ -97,10 +91,6 @@ void fitDefaulted(PixelMapCollection &pmc, vector<Extension *> extensions,
             extnptr->startWcs->toWorld(xpix, ypix, xw, yw);  // startWCS has no color!
             unique_ptr<Detection> dfit(new Detection);
             unique_ptr<Detection> dref(new Detection);
-            if (logging && (i == 10)) {
-                cerr << "pix check " << xpix << " " << ypix << " " << xw
-                     << " " << yw << endl;
-            }
             dfit->xpix = xpix;
             dfit->ypix = ypix;
             dref->xpix = xw;

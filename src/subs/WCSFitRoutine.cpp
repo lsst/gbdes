@@ -12,8 +12,12 @@ WCSFit::WCSFit(Fields &fields_, std::vector<std::shared_ptr<Instrument>> instrum
                const std::vector<LONGLONG> &extns, const std::vector<LONGLONG> &objects,
                const std::vector<int> &exposureColorPriorities, double sysErr, double refSysErr,
                int minMatches, std::string skipObjectsFile, std::string fixMaps, bool usePM, double pmPrior,
-               double parallaxPrior, int verbose)
+               double parallaxPrior, int verbose, int num_threads)
         : minMatches(minMatches), verbose(verbose), fields(std::move(fields_)) {
+
+    #ifdef _OPENMP
+        omp_set_num_threads(num_threads);
+    #endif
 
     if (usePM) astrometry::PMMatch::setPrior(pmPrior, parallaxPrior);
 

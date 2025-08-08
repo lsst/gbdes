@@ -1075,8 +1075,8 @@ void CoordAlign::operator()(const DVector &p, double &chisq, DVector &beta, DMat
             int iChunk = 0;
             int iRound = 0;
             int j = 0;
-            for (auto i : mlist) {
-                vi[j] = i;
+            for (auto const &i : mlist) {
+                vi[j] = i.get();
                 j++;
                 if (j % chunk == 0 && iRound < nRounds) {
                     // We have just finished writing a chunk's worth of
@@ -1448,7 +1448,8 @@ int CoordAlign::sigmaClip(double sigThresh, bool doReserved, bool clipEntireMatc
     // integers in a for loop.
     int n = mlist.size();
     vector<Match *> mvec(n);
-    std::copy(mlist.begin(), mlist.end(), mvec.begin());
+    std::transform(mlist.begin(), mlist.end(), mvec.begin(),
+                   [](std::unique_ptr<Match> const & m){return m.get();});
 #pragma omp parallel for schedule(dynamic, chunk) reduction(+ : nclip)
     for (auto ii = 0; ii < n; ++ii) {
         auto i = mvec[ii];
@@ -1479,7 +1480,8 @@ double CoordAlign::chisqDOF(int &dof, double &maxDeviate, bool doReserved) const
     // integers in a for loop.
     int n = mlist.size();
     vector<Match *> mvec(n);
-    std::copy(mlist.begin(), mlist.end(), mvec.begin());
+    std::transform(mlist.begin(), mlist.end(), mvec.begin(),
+                   [](std::unique_ptr<Match> const & m){return m.get();});
 #pragma omp parallel for schedule(dynamic, chunk) reduction(+ : dof) reduction(+ : chisq)
     for (auto ii = 0; ii < n; ++ii) {
         auto i = mvec[ii];

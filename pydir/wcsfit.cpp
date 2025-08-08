@@ -177,14 +177,14 @@ PYBIND11_MODULE(wcsfit, m) {
                           std::vector<int>, std::vector<int>, astrometry::YAMLCollector,
                           std::vector<std::shared_ptr<astrometry::Wcs>>, std::vector<int>,
                           std::vector<LONGLONG>, std::vector<LONGLONG>, std::vector<int>, double, double, int,
-                          std::string, std::string, bool, double, double, int>(),
+                          std::string, std::string, bool, double, double, int, int>(),
                  py::arg("fields"), py::arg("instruments"), py::arg("exposures"),
                  py::arg("extensionExposureNumbers"), py::arg("extensionDevices"), py::arg("inputYAML"),
                  py::arg("wcss"), py::arg("sequence"), py::arg("extns"), py::arg("objects"),
                  py::arg("exposureColorPriorities") = std::vector<int>(), py::arg("sysErr") = 2.0,
                  py::arg("refSysErr") = 2.0, py::arg("minMatches") = 2, py::arg("skipObjectsFile") = "",
                  py::arg("fixMaps") = "", py::arg("usePM") = true, py::arg("pmPrior") = 100.0,
-                 py::arg("parallaxPrior") = 10.0, py::arg("verbose") = 0)
+                 py::arg("parallaxPrior") = 10.0, py::arg("verbose") = 0, py::arg("num_threads") = 1)
             .def("setObjects", &WCSFit::setObjects, py::arg("i"), py::arg("tableMap"), py::arg("xKey"),
                  py::arg("yKey"), py::arg("xyErrKeys"), py::arg("idKey") = "", py::arg("pmCovKey") = "",
                  py::arg("magKey") = "", py::arg("magKeyElement") = 0, py::arg("magErrKey") = "",

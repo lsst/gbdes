@@ -31,7 +31,7 @@ public:
            const std::vector<int> &sequence, const std::vector<LONGLONG> &extns, const std::vector<LONGLONG> &objects,
            const std::vector<int> &exposureColorPriorities = std::vector<int>(), double sysErr = 2.0, double refSysErr = 2.0,
            int minMatches = 2, std::string skipObjectsFile = "", std::string fixMaps = "", bool usePM = true,
-           double pmPrior=100.0, double parallaxPrior=10.0, int verbose = 0);
+           double pmPrior=100.0, double parallaxPrior=10.0, int verbose = 0, int num_threads = 1);
 
     int minMatches;
     int verbose;
