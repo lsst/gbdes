@@ -126,7 +126,14 @@ void fitDefaulted(PixelMapCollection &pmc, vector<Extension *> extensions,
     // Build CoordAlign object and solve for defaulted parameters
     CoordAlign ca(pmcFit, matches);
     ca.setRelTolerance(0.01);  // weaker tolerance for fit convergence
-    ca.fitOnce(logging);
+    try {
+        ca.fitOnce(logging);
+    } catch (std::runtime_error &m) {
+        for (auto mapname : defaultedAtoms) {
+            std::cerr << "..Initialization failed for <" << mapname << ">. Setting map to Identity" << std::endl;
+            pmcFit.learnMap(astrometry::IdentityMap(mapname));
+        }
+    }
 
     // Copy defaulted parameters back into the parent pmc.
     for (auto mapname : defaultedAtoms) {
