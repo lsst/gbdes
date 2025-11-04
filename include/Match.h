@@ -9,6 +9,7 @@
 #include <set>
 using std::list;
 #include <string>
+#include <optional>
 #include "Std.h"
 #include "LinearAlgebra.h"
 #include "Bounds.h"
@@ -131,6 +132,10 @@ class Match {
     // Class for a set of matched Detections, with no PM or parallax freedom
 protected:
     list<unique_ptr<Detection>> elist;
+
+    // Tangent point for internal 'world' coordinates.
+    std::optional<astrometry::Gnomonic> fieldProjection;
+
     bool isReserved;  // Do not contribute to re-fitting if true
 
     // These flags will let a Match keep track of its internal state and
@@ -166,8 +171,33 @@ public:
     EIGEN_NEW
     Match(unique_ptr<Detection> e);
 
-    // Add and remove automatically update itsMatch of the Detection
-    void add(unique_ptr<Detection> e);
+    // Construct a Match from a list of detection properties.
+    Match(
+        std::vector<double> xw,
+        std::vector<double> yw,
+        std::vector<double> xCov,
+        std::vector<double> yCov,
+        std::vector<double> xyCov,
+        std::vector<double> mjd,
+        vector<std::vector<double>> observatory,
+        double fieldRA,
+        double fieldDec,
+        double fieldEpoch
+    );
+
+    // Add and automatically update itsMatch of the Detection.
+    // Set isMapped=true to prevent remapping from pixels to world coordinates.
+    void add(unique_ptr<Detection> e, bool isMapped=false);
+
+    // Create a PMDetection and add it to the detection list.
+    void addPMDetection(double xpix, double ypix,
+        double pmRA,
+        double pmDec,
+        double parallax,
+        std::vector<std::vector<double>> pixCov,
+        std::shared_ptr<astrometry::Wcs> wcs_
+        );
+
     void remove(Detection const &e);
     // Remove a Detection from the match given an iterator to it.
     list<unique_ptr<Detection>>::iterator erase(list<unique_ptr<Detection>>::iterator i);
@@ -214,6 +244,10 @@ public:
         solve();
         return xyMean;
     }
+
+    // Return the centroid in sky coordinates
+    virtual std::vector<double> getFit();
+
     virtual Matrix22 predictFisher(const Detection *d = nullptr) const {
         prepare();
         return centroidF;
@@ -224,6 +258,8 @@ public:
         prepare();
         return trueCentroidCov;
     }
+    // Get covariance in output units
+    Matrix22 getFitCovariance() const;
 
     // Increment chisq, beta, and alpha for this match.
     // Returned integer is the DOF count.  This *does* remap points
@@ -259,6 +295,20 @@ public:
     EIGEN_NEW
     PMMatch(unique_ptr<Detection> e);
 
+    // Construct a PMMatch from a list of detection properties.
+    PMMatch(
+        std::vector<double> xw,
+        std::vector<double> yw,
+        std::vector<double> xCov,
+        std::vector<double> yCov,
+        std::vector<double> xyCov,
+        std::vector<double> mjd,
+        vector<std::vector<double>> observatory,
+        double fieldRA,
+        double fieldDec,
+        double fieldEpoch
+    );
+
     // Set the prior applied to all PMMatches - given in the I/O units
     static void setPrior(double pmPrior, double parallaxPrior);
 
@@ -291,10 +341,20 @@ public:
         return pmTrueCov;
     }
 
+    // Return covariance matrix of PM in output units.
+    PMCovariance getFitCovariance() const;
+
     // Get predicted position (and inverse covariance) for a Detection.
     // The argument is needed only if there is full PM solution.
     Vector2 predict(const Detection *d = nullptr) const override;
+
+    // Get predicted position of object at epoch of each Detection.
+    std::vector<std::vector<double>> predictAtDetections();
+
     Matrix22 predictFisher(const Detection *d = nullptr) const override;
+
+    // Return 5-d solution in sky coordinates, or in output units for proper motion and parallax.
+    std::vector<double> getFit() override;
 
 protected:
 private:
