@@ -10,6 +10,7 @@
 
 #include "FitSubroutines.h"
 #include "Instrument.h"
+#include "Match.h"
 #include "TPVMap.h"
 #include "WCSFoFRoutine.h"
 #include "WCSFitRoutine.h"
@@ -112,7 +113,7 @@ PYBIND11_MODULE(wcsfit, m) {
                           bool>(),
                  py::arg("pm_"), py::arg("nativeCoords_"), py::arg("name") = "", py::arg("wScale_") = DEGREE,
                  py::arg("shareMap_") = false)
-            .def("reprojectTo", &astrometry::Wcs::getTargetCoords)
+            .def("reprojectTo", &astrometry::Wcs::reprojectTo)
             .def("getTargetCoords", &astrometry::Wcs::getTargetCoords)
             .def("getNativeCoords", &astrometry::Wcs::getNativeCoords)
             .def("toWorld", [](astrometry::Wcs &self, double x, double y) {
@@ -170,6 +171,31 @@ PYBIND11_MODULE(wcsfit, m) {
             .def("getWcsNativeCoords", &astrometry::PixelMapCollection::getWcsNativeCoords,
                  py::arg("wcsName"), py::arg("degrees") = false)
             .def("dependencies", &astrometry::PixelMapCollection::dependencies);
+
+    py::class_<astrometry::Match>(m, "Match")
+            .def(py::init<std::vector<double>, std::vector<double>,
+                          std::vector<double>, std::vector<double>, std::vector<double>,
+                          std::vector<double>, std::vector<std::vector<double>>,
+                          double, double, double>()
+            )
+            .def("addPMDetection", &astrometry::Match::addPMDetection)
+            .def("solve", &astrometry::Match::solve)
+            .def("predict", &astrometry::Match::predict)
+            .def("getFit", &astrometry::Match::getFit)
+            .def("getFitCovariance", &astrometry::Match::getFitCovariance);
+
+        py::class_<astrometry::PMMatch, astrometry::Match>(m, "PMMatch")
+            .def(py::init<std::vector<double>, std::vector<double>,
+                          std::vector<double>, std::vector<double>, std::vector<double>,
+                          std::vector<double>, std::vector<std::vector<double>>,
+                          double, double, double>())
+            .def("getPM", &astrometry::PMMatch::getPM)
+            .def("getFitCovariance", &astrometry::PMMatch::getFitCovariance)
+            .def("predictAtDetections", [](astrometry::PMMatch &self) {
+                    std::vector<std::vector<double>> predictions = self.predictAtDetections();
+                    auto result = vectorToNumpy(predictions);
+                    return result;
+            });
 
     ////////////// WCS-fitting class ////////////////////////
     py::class_<WCSFit>(m, "WCSFit")

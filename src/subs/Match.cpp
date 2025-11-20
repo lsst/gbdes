@@ -188,14 +188,140 @@ Match::Match(unique_ptr<Detection> e)
     add(std::move(e));
 }
 
-void Match::add(unique_ptr<Detection> e) {
+Match::Match(std::vector<double> xw,
+             std::vector<double> yw,
+             std::vector<double> xCov,
+             std::vector<double> yCov,
+             std::vector<double> xyCov,
+             std::vector<double> mjd,
+             vector<std::vector<double>> observatory,
+             double fieldRA,
+             double fieldDec,
+             double fieldMJD)
+    : elist(),
+      nFit(0),
+      dof(0),
+      isReserved(false),
+      isPrepared(false),
+      isMappedFit(false),
+      isMappedAll(true),
+      isSolved(false),
+      trivialWeights(false)
+{
+
+    if (not (xw.size() == yw.size()) && (xw.size() == xCov.size()) && (xw.size() == yCov.size()) 
+        && (xw.size() == xyCov.size()) && (xw.size() == mjd.size()) && (xw.size() == observatory.size())) {
+        throw std::runtime_error("Input arrays must have same length.");
+    }
+    astrometry::Orientation orient(
+        astrometry::SphericalICRS(std::move(fieldRA) * WCS_UNIT,
+                                    std::move(fieldDec) * WCS_UNIT));
+    fieldProjection = *(new astrometry::Gnomonic(orient));
+
+    astrometry::UT fieldUT;
+    fieldUT.setMJD(fieldMJD);
+    double fieldEpochTTyr = fieldUT.getTTyr();
+    for (int i = 0; i < xw.size(); i++)
+    {
+        std::unique_ptr<Detection> d(new Detection);
+        d->xw = xw[i];
+        d->yw = yw[i];
+        // Fill in covariance:
+        astrometry::Matrix22 cov(0.);
+        cov(0, 0) = xCov[i];
+        cov(1, 1) = yCov[i];
+        cov(0, 1) = xyCov[i];
+        cov(1, 0) = xyCov[i];
+        d->invCov = cov.inverse();
+
+        Vector3 expoObservatory;
+        for (int j = 0; j < 3; ++j)
+            expoObservatory[j] = observatory[i][j];
+
+        astrometry::UT ut;
+        ut.setMJD(mjd[i]);
+        double pmTDB = ut.getTTyr() - fieldEpochTTyr;
+        d->buildProjector(pmTDB, expoObservatory, &fieldProjection.value());
+        add(std::move(d), true);
+    }
+}
+
+void Match::add(unique_ptr<Detection> e, bool isMapped) {
     isPrepared = false;
     e->itsMatch = this;
     e->isClipped = false;
     elist.push_back(std::move(e));
-    isMappedFit = false;
-    isMappedAll = false;
+    isMappedFit &= isMapped;
+    isMappedAll &= isMapped;
     isSolved = false;
+}
+
+void Match::addPMDetection(
+        double xpix_,
+        double ypix_,
+        double pmRA_,
+        double pmDec_,
+        double parallax_,
+        std::vector<std::vector<double>> pixCov_,
+        std::shared_ptr<astrometry::Wcs> wcs_
+        ) {
+    std::unique_ptr<PMDetection> d(new PMDetection);
+    d->xpix = xpix_;
+    d->ypix = ypix_;
+
+    double pmRA = pmRA_ * PM_UNIT / (WCS_UNIT / TDB_UNIT);
+    double pmDec = pmDec_ * PM_UNIT / (WCS_UNIT / TDB_UNIT);
+    double parallax = parallax_ * PARALLAX_UNIT / WCS_UNIT;
+
+    //astrometry::IdentityMap identity;
+    //astrometry::SphericalICRS icrs;
+    //std::unique_ptr<astrometry::Wcs> wcs = std::unique_ptr<astrometry::Wcs>(
+    //          new astrometry::Wcs(&identity, icrs, "ICRS_degrees", WCS_UNIT));
+    //wcs->reprojectTo(*fieldProjection);
+    wcs_->reprojectTo(*fieldProjection);
+    std::unique_ptr<astrometry::Wcs> wcs = std::unique_ptr<astrometry::Wcs>(wcs_->duplicate());
+
+    wcs->toWorld(d->xpix, d->ypix, d->xw, d->yw);
+    auto dwdp = wcs->dWorlddPix(d->xpix, d->ypix);
+
+    // Fill in the PM central values
+    d->pmMean[astrometry::X0] = d->xw;
+    d->pmMean[astrometry::Y0] = d->yw;
+    d->pmMean[astrometry::VX] = pmRA;
+    d->pmMean[astrometry::VY] = pmDec;
+    d->pmMean[astrometry::PAR] = parallax;
+
+    astrometry::PMCovariance pmCov;      // Covariance from catalog
+    astrometry::PMCovariance dwdp5(0.);  // 5d transformation matrix to world coords
+    for (int i = 0; i < 5; i++) {
+        dwdp5(i, i) = 1.;
+        for (int j = 0; j < 5; j++) {
+            pmCov(i, j) = pixCov_[i][j];
+        }
+    }
+
+    // Covariances were in I/O units, convert everything to internal WCS_UNIT
+    for (int j = 0; j < 5; j++) {
+        pmCov(astrometry::X0, j) *= RESIDUAL_UNIT / WCS_UNIT;
+        pmCov(j, astrometry::X0) *= RESIDUAL_UNIT / WCS_UNIT;
+        pmCov(astrometry::Y0, j) *= RESIDUAL_UNIT / WCS_UNIT;
+        pmCov(j, astrometry::Y0) *= RESIDUAL_UNIT / WCS_UNIT;
+        pmCov(astrometry::VX, j) *= PM_UNIT / (WCS_UNIT / TDB_UNIT);
+        pmCov(j, astrometry::VX) *= PM_UNIT / (WCS_UNIT / TDB_UNIT);
+        pmCov(astrometry::VY, j) *= PM_UNIT / (WCS_UNIT / TDB_UNIT);
+        pmCov(j, astrometry::VY) *= PM_UNIT / (WCS_UNIT / TDB_UNIT);
+        pmCov(astrometry::PAR, j) *= PARALLAX_UNIT / WCS_UNIT;
+        pmCov(j, astrometry::PAR) *= PARALLAX_UNIT / WCS_UNIT;
+    }
+    dwdp5.subMatrix(0, 2, 0, 2) = dwdp;
+    astrometry::PMCovariance wCov = (dwdp5 * pmCov * dwdp5.transpose());
+    d->pmInvCov = wCov.inverse();
+    d->fitWeight = 1;
+
+    astrometry::Matrix22 cov22 = wCov.subMatrix(0, 2, 0, 2);
+    d->invCov = cov22.inverse();
+
+    add(std::move(d), true);
 }
 
 void Match::remove(Detection const &e) {
@@ -554,6 +680,38 @@ double Match::chisq(int &dofAccum, double &maxDeviateSq, bool dump) const {
     return chi;
 }
 
+std::vector<double> Match::getFit() {
+
+    astrometry::Vector2 matchCentroid = predict();
+    
+    fieldProjection->setLonLat(matchCentroid[astrometry::X0] * WCS_UNIT,
+                               matchCentroid[astrometry::Y0] * WCS_UNIT);
+    double ra, dec;
+    astrometry::SphericalICRS icrs(*fieldProjection);
+    icrs.getRADec(ra, dec);
+    std::vector<double> fitPosition(2);
+    fitPosition[0] = ra / WCS_UNIT;
+    fitPosition[1] = dec / WCS_UNIT;
+
+    return fitPosition;
+}
+
+Matrix22 Match::getFitCovariance() const {
+    // Make vector of units conversions to I/O units
+    vector<float> units(2);
+    units[astrometry::X0] = WCS_UNIT / RESIDUAL_UNIT;
+    units[astrometry::Y0] = WCS_UNIT / RESIDUAL_UNIT;
+
+    auto centroidCovariance = getCentroidCov();
+    auto fisher = centroidCovariance.inverse();
+    Matrix22 scaledFisher;
+    for (int i = 0; i < 2; i++)
+        for (int j = 0; j < 2; j++) {
+            scaledFisher(i, j) = fisher(i, j) / (units[i] * units[j]);
+        }
+    return scaledFisher.inverse();
+}
+
 /////////////////////////////////////////////////////////////////////
 // Routines for matches allowing proper motion and parallax
 /////////////////////////////////////////////////////////////////////
@@ -561,6 +719,23 @@ double Match::chisq(int &dofAccum, double &maxDeviateSq, bool dump) const {
 const double PM_PRIOR = 100. * RESIDUAL_UNIT / WCS_UNIT; /**/
 
 PMMatch::PMMatch(unique_ptr<Detection> e) : Match(std::move(e)), pm(0.) {}
+
+PMMatch::PMMatch(
+    std::vector<double> xw,
+    std::vector<double> yw,
+    std::vector<double> xCov,
+    std::vector<double> yCov,
+    std::vector<double> xyCov,
+    std::vector<double> mjd,
+    vector<std::vector<double>> observatory,
+    double fieldRA,
+    double fieldDec,
+    double fieldEpoch)
+    : Match(xw, yw, xCov, yCov, xyCov, mjd, observatory, fieldRA, fieldDec, fieldEpoch),
+      pm(0.)
+{
+    setPrior(100.0, 10.0);
+}
 
 void PMMatch::prepare() const {
     if (isPrepared) return;
@@ -589,7 +764,6 @@ void PMMatch::prepare() const {
             dof += 5;
             nFit++;
             if (ii->fitWeight == 1.) {
-                //**/cerr << "PMDetection for Fisher:\n" << ii->pmInvCov << endl;
                 pmFisher += ii->pmInvCov;
             } else {
                 trivialWeights = false;
@@ -645,7 +819,6 @@ void PMMatch::prepare() const {
                 priorMean += tmp;
             }
         }
-
         priorMean = pmInvFisher * priorMean;  // linear term of chisq
     }
 
@@ -852,6 +1025,24 @@ Vector2 PMMatch::predict(const Detection *d) const {
     return out;
 }
 
+std::vector<std::vector<double>> PMMatch::predictAtDetections() {
+    std::vector<std::vector<double>> prediction;
+        prediction.reserve(elist.size());
+        for (auto i = elist.begin(); i != elist.end(); ++i) {
+            Vector2 predict_i = predict(i->get());
+            fieldProjection->setLonLat(predict_i[astrometry::X0] * WCS_UNIT,
+                               predict_i[astrometry::Y0] * WCS_UNIT);
+            double ra, dec;
+            astrometry::SphericalICRS icrs(*fieldProjection);
+            icrs.getRADec(ra, dec);
+            std::vector<double> fitPosition(2);
+            fitPosition[0] = ra / WCS_UNIT;
+            fitPosition[1] = dec / WCS_UNIT;
+            prediction.emplace_back(fitPosition);
+        }
+    return prediction;
+}
+
 Matrix22 PMMatch::predictFisher(const Detection *d) const {
     if (!d) throw AstrometryError("PMMatch::predict called without Detection");
     prepare();
@@ -1026,6 +1217,52 @@ int PMMatch::accumulateChisq(double &chisq, DVector &beta, SymmetricUpdater &upd
     }
 
     return dof;
+}
+
+std::vector<double> PMMatch::getFit() {
+
+    // Make vector of units conversions to I/O units
+    vector<float> units(5);
+    units[astrometry::X0] = WCS_UNIT / RESIDUAL_UNIT;
+    units[astrometry::Y0] = WCS_UNIT / RESIDUAL_UNIT;
+    units[astrometry::PAR] = WCS_UNIT / RESIDUAL_UNIT;
+    units[astrometry::VX] = WCS_UNIT / (RESIDUAL_UNIT / TDB_UNIT);
+    units[astrometry::VY] = WCS_UNIT / (RESIDUAL_UNIT / TDB_UNIT);
+
+    // Save the solution in a table
+    auto pm = getPM();
+           
+    fieldProjection->setLonLat(pm[astrometry::X0] * WCS_UNIT, pm[astrometry::Y0] * WCS_UNIT);
+    double ra, dec;
+    astrometry::SphericalICRS icrs(*fieldProjection);
+    icrs.getRADec(ra, dec);
+
+    std::vector<double> fitPosition(5);
+
+    fitPosition[0] = ra / WCS_UNIT;
+    fitPosition[1] = dec / WCS_UNIT;
+    fitPosition[2] = pm[astrometry::VX] * units[astrometry::VX];
+    fitPosition[3] = pm[astrometry::VY] * units[astrometry::VY];
+    fitPosition[4] = pm[astrometry::PAR] * units[astrometry::PAR];
+    return fitPosition;
+}
+
+PMCovariance PMMatch::getFitCovariance() const {
+    // Make vector of units conversions to I/O units
+    vector<float> units(5);
+    units[astrometry::X0] = WCS_UNIT / RESIDUAL_UNIT;
+    units[astrometry::Y0] = WCS_UNIT / RESIDUAL_UNIT;
+    units[astrometry::PAR] = WCS_UNIT / RESIDUAL_UNIT;
+    units[astrometry::VX] = WCS_UNIT / (RESIDUAL_UNIT / TDB_UNIT);
+    units[astrometry::VY] = WCS_UNIT / (RESIDUAL_UNIT / TDB_UNIT);
+
+    auto fisher = getInvCovPM();
+    PMCovariance scaledFisher;
+    for (int i = 0; i < 5; i++)
+        for (int j = 0; j < 5; j++) {
+            scaledFisher(i, j) = fisher(i, j) / (units[i] * units[j]);
+        }
+    return scaledFisher.inverse();
 }
 
 /////////////////////////////////////////////////////////////////////
